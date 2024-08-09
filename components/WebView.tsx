@@ -15,6 +15,13 @@ const WebView: React.FC<WebViewProps> = ({ html, css, js }) => {
       const content = `
         <style>${css}</style>
         ${html}
+        <script>
+  const originalConsoleLog = console.log;
+  console.log = function(...args) {
+    originalConsoleLog.apply(console, args);
+    window.parent.postMessage({ source: 'iframe', type: 'log', data: args.join(' ') }, '*');
+  };
+<\/script>
         <script>${js}<\/script>
       `;
       document.open();

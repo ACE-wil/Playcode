@@ -12,7 +12,7 @@ const Home: React.FC = () => {
   const [css, setCss] = useState('h1 { color: red; }');
   const [js, setJs] = useState('console.log("Hello World");');
   const [output, setOutput] = useState('');
-
+  const [messages, setMessages] = useState([]); // 新增状态来存储消息  
 
   const appendMessage = (message: string, isError: boolean) => {
     const consoleDiv = document.getElementById('console') as HTMLDivElement;
@@ -33,7 +33,7 @@ const Home: React.FC = () => {
     if (language === 'css') setCss(value || '');
     if (language === 'javascript') {
       setJs(value || '');
-  
+      setMessages([]); 
       // 清空控制台
       appendMessage('', false); // 这里可以传入一个空字符串和false来清空控制台
   
@@ -63,8 +63,27 @@ const Home: React.FC = () => {
     };
   };
 
+  useEffect(() => {
+    // 当组件挂载时，模拟JavaScript编辑器内容改变
+    handleEditorChange('javascript', js);
+  }, []); // 空数组表示此effect只在组件挂载时运行一次
 
-
+  useEffect(() => {
+    const handleMessage = (event:any) => {
+      if (event.origin !== window.location.origin) return; // 确保消息来源正确
+      if (event.data.source === 'iframe' && event.data.type === 'log') {
+        appendMessage(event.data.data, false); // 使用你的appendMessage函数显示信息
+      }
+    };
+  
+    window.addEventListener('message', handleMessage);
+  
+    // 清除事件监听器，防止内存泄漏
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
+  }, []);
+  
   return (
     <div style={{padding:'10px'}}>
       <div style={{width:'100vw',height:'30px',backgroundColor:'#5EC2B9',textAlign:'center',lineHeight:'30px',fontSize:'25px',color:'white',letterSpacing:'20px'}}>PlayCode.io</div>
@@ -106,7 +125,7 @@ const Home: React.FC = () => {
             style={{background: "#8cdbd5",display:'flex',flexDirection:'column',boxShadow:'rgba(0, 0, 0, 0.16) 0px 1px 4px',marginRight:'10px'}}
             defaultSize={{width:'50vw',height:'30vh'}}
             >
-            <div style={{height:'15px',fontSize:'20px',marginLeft:'10px',width:'100%',zIndex:2}}>javascript</div>
+            <div style={{height:'15px',fontSize:'20px',marginLeft:'10px',width:'100%',zIndex:2}}>Javascript</div>
           <div style={{width:'100%',height:'100%',marginTop:'15px'}}>
             <CodeEditor language="javascript" value={js} onChange={(value) => handleEditorChange('javascript', value)} />
           </div>
