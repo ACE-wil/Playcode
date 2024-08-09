@@ -5,84 +5,82 @@ import { Resizable } from "re-resizable";
 const CodeEditor = dynamic(() => import('../components/CodeEditor'), { ssr: false });
 const WebView = dynamic(() => import('../components/WebView'), { ssr: false });
 
-
+type LogMessage = string | { message: string; isError: boolean };
 
 const Home: React.FC = () => {
   const [html, setHtml] = useState('<h1>Hello World</h1>');
   const [css, setCss] = useState('h1 { color: red; }');
   const [js, setJs] = useState('console.log("Hello World");');
   const [output, setOutput] = useState('');
-  const [messages, setMessages] = useState([]); // 新增状态来存储消息  
+  const [logMessages, setLogMessages] = useState<LogMessage[]>([]); 
 
-  const appendMessage = (message: string, isError: boolean) => {
-    const consoleDiv = document.getElementById('console') as HTMLDivElement;
-    if (!consoleDiv) return;
-    // 清空控制台 div 的内容
-    consoleDiv.innerHTML = '';
-
-    const p = document.createElement('p');
-    p.textContent = message;
-    p.style.color = isError ? 'red' : '#000';
-    p.style.fontFamily = 'Menlo,Monaco,source-code-pro,Ubuntu Mono,DejaVu sans mono,Consolas,monospace';
-    consoleDiv.appendChild(p);
+  const appendMessage = (message: string, isError: boolean) => {  
+    setLogMessages(prev => [...prev, { message, isError }]);  
   };
 
+// 处理编辑器更改的函数  
+const handleEditorChange = (language: string, value: string | undefined) => {  
+  if (language === 'html') setHtml(value || '');  
+  if (language === 'css') setCss(value || '');  
+  if (language === 'javascript') {  
+    setJs(value || '');  
 
-  const handleEditorChange = (language: string, value: string | undefined) => {
-    if (language === 'html') setHtml(value || '');
-    if (language === 'css') setCss(value || '');
-    if (language === 'javascript') {
-      setJs(value || '');
-      setMessages([]); 
-      // 清空控制台
-      appendMessage('', false); // 这里可以传入一个空字符串和false来清空控制台
+    // 在尝试执行新代码之前清空 UI 显示的日志  
+    setLogMessages([]); 
   
-      if (value && value.trim()) { // 只有在代码非空的情况下才执行eval
-        try {
-          const oldLog = console.log;
-          const oldError = console.error;
+    if (value && value.trim()) {  
+      let originalLog = console.log;  
+      let originalError = console.error; 
+      try {  
+        console.log = (...args: any[]) => {  
+          const message = args.join(' ');  
+          setLogMessages(prev => [...prev, { message, isError: false }]);  
+          originalLog.apply(console, args);  
+        };  
   
-          // 重定向 console.log 和 console.error
-          console.log = (message: any) => {
-            appendMessage(`${message}`, false);
-          };
-          console.error = (error: any) => {
-            appendMessage(`Error: ${error}`, true);
-          };
-  
-          // 注意：使用 eval() 有一定的安全风险
-          eval(value as string);
-  
-          // 恢复原始的 console.log 和 console.error
-          console.log = oldLog;
-          console.error = oldError;
-        } catch (error: any) {
-          appendMessage(`Error: ${error.message}`, true);
-        }
-      }
-    };
-  };
+        console.error = (error: any) => {  
+          const errorMessage = `Error: ${error}`;  
+          setLogMessages(prev => [...prev, { message: errorMessage, isError: true }]);  
+          originalError.apply(console, [error]);  
+        };  
 
-  useEffect(() => {
-    // 当组件挂载时，模拟JavaScript编辑器内容改变
-    handleEditorChange('javascript', js);
-  }, []); // 空数组表示此effect只在组件挂载时运行一次
+        // 使用 new Function 而不是 eval 来执行 JavaScript
+        const executeJS = new Function(value);
+        executeJS();
 
-  useEffect(() => {
-    const handleMessage = (event:any) => {
-      if (event.origin !== window.location.origin) return; // 确保消息来源正确
-      if (event.data.source === 'iframe' && event.data.type === 'log') {
-        appendMessage(event.data.data, false); // 使用你的appendMessage函数显示信息
-      }
-    };
-  
-    window.addEventListener('message', handleMessage);
-  
-    // 清除事件监听器，防止内存泄漏
-    return () => {
-      window.removeEventListener('message', handleMessage);
-    };
-  }, []);
+      } catch (error) {  
+        const errorMessage = `Error: ${(error as Error).message}`;  
+        setLogMessages(prev => [...prev, { message: errorMessage, isError: true }]);  
+      } finally {  
+        // 恢复原始的 console 方法
+        console.log = originalLog;  
+        console.error = originalError;  
+      }  
+    }  
+  }  
+};
+
+
+// useEffect(() => {
+//   // 事件处理函数
+//   const handleMessage = (event: any) => {
+//     if (event.origin !== window.location.origin) return; // 确保消息来源正确
+//     if (event.data.source === 'iframe' && event.data.type === 'log') {
+//       const message = event.data.data; // 从事件中获取日志消息
+//       const isError = event.data.isError || false; // 从事件中获取错误状态，默认为 false
+//       setLogMessages(prev => [...prev, { message, isError }]);
+//     }
+//   };
+
+//   // 添加事件监听器
+//   window.addEventListener('message', handleMessage);
+
+//   // 清除事件监听器，防止内存泄漏
+//   return () => {
+//     window.removeEventListener('message', handleMessage);
+//   };
+// }, []); // 空依赖数组，确保 useEffect 只在组件挂载时运行一次
+
   
   return (
     <div style={{padding:'10px'}}>
@@ -110,12 +108,28 @@ const Home: React.FC = () => {
             <CodeEditor language="css" value={css} onChange={(value) => handleEditorChange('css', value)} />
           </div>
           </Resizable> */}
+          
       <Resizable
             style={{background: "#8cdbd5",display:'flex',flexDirection:'column',marginLeft:'20px',boxShadow:'rgba(0, 0, 0, 0.16) 0px 1px 4px'}}
             defaultSize={{width:'50vw',height:'30vh'}}
             >
             <div style={{height:'15px',fontSize:'20px',marginLeft:'10px',width:'100%',zIndex:2}}>CONSOLE</div>
           <div id="console" style={{ width:'100%',height:'100%',padding: '10px', backgroundColor:'white', color: 'red' ,marginTop:'15px'}}>
+          <div id="console" style={{ width: '100%', height: '100%', padding: '10px', backgroundColor: 'white', overflowY: 'auto' }}>  
+{logMessages.map((msg, index) => {  
+  if (typeof msg === 'object' && msg !== null && 'message' in msg) {  
+    // 现在我们知道 msg 是一个对象，并且它有一个 'message' 属性  
+    return (  
+      <p key={index} style={{ color: msg.isError ? 'red' : '#000',  fontFamily: 'Menlo, Monaco, source-code-pro, Ubuntu Mono, DejaVu sans mono, Consolas, monospace', whiteSpace: 'pre-wrap'/* ... 其他样式 */ }}>  
+        {msg.message.replace(/\n/g, '<br/>')}  
+      </p>  
+    );  
+  } else {  
+    // 如果 msg 不是我们期望的对象，或者没有 'message' 属性，我们可以提供一个默认的渲染  
+    return <p key={index} style={{ color:  '#000',  fontFamily: 'Menlo, Monaco, source-code-pro, Ubuntu Mono, DejaVu sans mono, Consolas, monospace', whiteSpace: 'pre-wrap' }}>{(typeof msg === 'string' ? msg : 'Unknown message')}</p>;  
+  }  
+})}
+</div>
           </div>
           </Resizable>
       </div>
